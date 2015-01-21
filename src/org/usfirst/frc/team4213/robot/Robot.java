@@ -28,7 +28,7 @@ public class Robot extends IterativeRobot {
 		drivetrain.gyroInit();
     }
     public void autonomousPeriodic() {
-    	drivetrain.rawDrive(0.3, 0, 0);
+    	drivetrain.regulatedDrive(0.2);
     }
     
     public void teleopPeriodic() {
