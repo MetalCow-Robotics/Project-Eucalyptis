@@ -9,29 +9,28 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import java.lang.Math;
 
 public class SlideDrive {
-	SpeedController leftWheels, rightWheels, strafingWheels;
+	CANJaguar leftWheels, rightWheels, strafingWheels;
 	
 	  SerialPort serial_port;
 	  IMU imu;
 	  double desiredHeading = 0;
 	  boolean wasRegulatingHeading=true;
 	
-	public SlideDrive(SpeedController left, SpeedController right, SpeedController strafing) {
+	public SlideDrive(CANJaguar left, CANJaguar right, CANJaguar strafing) {
 		leftWheels=left;
 		rightWheels=right;
 		strafingWheels=strafing;
 		
+		// Put all of the jags into voltage (scaled from -1 to +1) mode.
+		leftWheels.setPercentMode();
+		leftWheels.enableControl();
+		rightWheels.setPercentMode();
+		rightWheels.enableControl();
+		strafingWheels.setPercentMode();
+		strafingWheels.enableControl();
+		
 		try {
 	    	serial_port = new SerialPort(57600,SerialPort.Port.kOnboard);
-			
-			// You can add a second parameter to modify the 
-			// update rate (in hz) from 4 to 100.  The default is 100.
-			// If you need to minimize CPU load, you can set it to a
-			// lower value, as shown here, depending upon your needs.
-			
-			// You can also use the IMUAdvanced class for advanced
-			// features.
-			//imu = new IMU(serial_port,(byte)50);
 			imu = new IMU(serial_port, (byte)50);
     	} catch( Exception ex ) {
     		ex.printStackTrace();
@@ -39,7 +38,13 @@ public class SlideDrive {
         if ( imu != null ) {
             LiveWindow.addSensor("IMU", "Gyro", imu);
         }
-        //SmartDashboard.putNumber("Gyro KP", 50);
+        
+        // Make sure we have our tuning constants on the dashboard if they aren't already there.
+        try{SmartDashboard.getNumber("Gyro KP");}
+        catch(Exception e){SmartDashboard.putNumber("Gyro KP", 130);}
+        try{SmartDashboard.getNumber("Gyro KPE");}
+        catch(Exception e){SmartDashboard.putNumber("Gyro KPE", 0.5);}
+        
 	}
 
 	
@@ -56,16 +61,36 @@ public class SlideDrive {
 		desiredHeading = 0;
 	}
 	    
-	public void rawDrive(double y, double x, double w) {
-		leftWheels.set((y+w));
-		rightWheels.set(-(y-w));
+	public void rawDrive(double y, double x, double w, double t) {
+		double left = (y+w)*t;
+		double right = -(y-w)*t;
+		
+		if (Math.abs(left) > Math.abs(right)) {
+			if (Math.abs(left) > t) {
+				
+				right = right/Math.abs(left) * t;
+				left = Math.copySign(t, left);
+			}
+		} else {
+			if (Math.abs(right) > t) {
+				left = left/Math.abs(right) * t;
+				right = Math.copySign(t, right);
+			}
+		}
+		
+		leftWheels.set(left);
+		rightWheels.set(right);
 		strafingWheels.set(x);
 	}
 	
-	public void regulatedDrive(double y, double x, double w) {		
+	public void rawDrive(double y, double x, double w) {
+		rawDrive(y,x,w,1);
+	}
+	
+	public void regulatedDrive(double y, double x, double w, double t) {		
 		double currentHeading = imu.getYaw();
 		
-		if (w < 0.1 && w > -0.1) {
+		if (w < 0.07 && w > -0.07) {
 			SmartDashboard.putNumber(   "Robot Heading",       currentHeading       );
 			
 			if (!wasRegulatingHeading)
@@ -80,14 +105,17 @@ public class SlideDrive {
 			
 			SmartDashboard.putNumber("Robot Heading Error", error);
 			
-			rawDrive(y, 0, error/SmartDashboard.getNumber("Gyro KP"));
+			rawDrive(y, 0, Math.copySign(Math.pow(Math.abs(error/SmartDashboard.getNumber("Gyro KP")), SmartDashboard.getNumber("Gyro KE")), error), t);
 			
 			wasRegulatingHeading = true;
 		} else {
-			rawDrive(y, 0, w);
+			rawDrive(y, 0, w, t);
 			
 			wasRegulatingHeading = false;
 		}
+	}
+	public void regulatedDrive(double y, double x, double w) {
+		regulatedDrive(y,x,w,1);
 	}
 	
 	public void setHeading(double heading) {
