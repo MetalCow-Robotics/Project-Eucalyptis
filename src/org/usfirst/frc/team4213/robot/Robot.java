@@ -28,14 +28,26 @@ public class Robot extends IterativeRobot {
 		drivetrain.gyroInit();
     }
     public void autonomousPeriodic() {
-    	drivetrain.regulatedDrive(0.2);
+    	drivetrain.regulatedDrive(0.2, 0 , 0);
     }
     
     public void teleopPeriodic() {
 	    // Will, FYI, you just needed to import the SmartDashboard. See line 4.
     	
         //drivetrain.rawDrive(driverController.getLY(), driverController.getRawAxis(0), driverController.getRX());
-    	drivetrain.regulatedDrive(driverController.getLY());
+    	drivetrain.regulatedDrive(driverController.getLY(), 0, driverController.getRX());
+    	
+    	if (driverController.getRawButton(1))
+    		drivetrain.setHeading(180);
+    	if (driverController.getRawButton(2))
+    		drivetrain.setHeading(90);
+    	if (driverController.getRawButton(3))
+    		drivetrain.setHeading(-90);
+    	if (driverController.getRawButton(4))
+    		drivetrain.setHeading(0);
+    	
+    	if (driverController.getRawButton(11))
+    		drivetrain.imu.zeroYaw();
     }
     
     /*public void testPeriodic() {

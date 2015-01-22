@@ -13,6 +13,8 @@ public class SlideDrive {
 	
 	  SerialPort serial_port;
 	  IMU imu;
+	  double desiredHeading = 0;
+	  boolean wasRegulatingHeading=true;
 	
 	public SlideDrive(SpeedController left, SpeedController right, SpeedController strafing) {
 		leftWheels=left;
@@ -37,6 +39,7 @@ public class SlideDrive {
         if ( imu != null ) {
             LiveWindow.addSensor("IMU", "Gyro", imu);
         }
+        //SmartDashboard.putNumber("Gyro KP", 50);
 	}
 
 	
@@ -47,6 +50,11 @@ public class SlideDrive {
             imu.zeroYaw();
         }
 	}
+	
+	public void zeroGyro() {
+		imu.zeroYaw();
+		desiredHeading = 0;
+	}
 	    
 	public void rawDrive(double y, double x, double w) {
 		leftWheels.set((y+w));
@@ -54,21 +62,35 @@ public class SlideDrive {
 		strafingWheels.set(x);
 	}
 	
-	public void regulatedDrive(double y) {
+	public void regulatedDrive(double y, double x, double w) {		
 		double currentHeading = imu.getYaw();
-		double desiredHeading = 90;
 		
-		SmartDashboard.putNumber(   "IMU_Yaw",       currentHeading       );
-		
-		double error = desiredHeading-currentHeading;
-		
-		if (error > 180)
-			error -= 360;
-		else if (error < -180)
-			error += 360;
-		
-		SmartDashboard.putNumber("IMU_Computed_Error", error);
-		
-		rawDrive(y, 0, error/40);
+		if (w < 0.1 && w > -0.1) {
+			SmartDashboard.putNumber(   "Robot Heading",       currentHeading       );
+			
+			if (!wasRegulatingHeading)
+				desiredHeading=currentHeading;
+			
+			double error = desiredHeading-currentHeading;
+			
+			if (error > 180)
+				error -= 360;
+			else if (error < -180)
+				error += 360;
+			
+			SmartDashboard.putNumber("Robot Heading Error", error);
+			
+			rawDrive(y, 0, error/SmartDashboard.getNumber("Gyro KP"));
+			
+			wasRegulatingHeading = true;
+		} else {
+			rawDrive(y, 0, w);
+			
+			wasRegulatingHeading = false;
+		}
+	}
+	
+	public void setHeading(double heading) {
+		desiredHeading = heading;
 	}
 }
