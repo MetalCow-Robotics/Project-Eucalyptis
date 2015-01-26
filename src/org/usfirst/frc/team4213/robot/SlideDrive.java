@@ -39,12 +39,15 @@ public class SlideDrive {
             LiveWindow.addSensor("IMU", "Gyro", imu);
         }
         
-        // Make sure we have our tuning constants on the dashboard if they aren't already there.
+        putRequiredDashboardValues();
+	}
+	
+	public void putRequiredDashboardValues() {
+		// Make sure we have our tuning constants on the dashboard if they aren't already there.
         try{SmartDashboard.getNumber("Gyro KP");}
         catch(Exception e){SmartDashboard.putNumber("Gyro KP", 130);}
         try{SmartDashboard.getNumber("Gyro KPE");}
         catch(Exception e){SmartDashboard.putNumber("Gyro KPE", 0.5);}
-        
 	}
 
 	
@@ -87,8 +90,25 @@ public class SlideDrive {
 		rawDrive(y,x,w,1);
 	}
 	
-	public void regulatedDrive(double y, double x, double w, double t) {		
+	public void regulatedDrive(double y, double x, double w, double t, boolean fieldOriented) {		
 		double currentHeading = imu.getYaw();
+		
+		if (fieldOriented) {
+			double m = Math.sqrt(y*y+x*x);
+			double h = Math.atan2(x, y)-Math.toRadians(currentHeading);
+			
+			
+			
+			//if (h>Math.PI/2) h-=Math.PI;
+			//if (h<-Math.PI/2) h+=Math.PI;
+			
+			SmartDashboard.putNumber("FOH_h", Math.toDegrees(h));
+			
+			x=Math.sin(h)*m;
+			y=Math.cos(h)*m;
+			SmartDashboard.putNumber("FOH_x", x);
+			SmartDashboard.putNumber("FOH_y", y);
+		}
 		
 		if (w < 0.07 && w > -0.07) {
 			SmartDashboard.putNumber(   "Robot Heading",       currentHeading       );
@@ -114,8 +134,11 @@ public class SlideDrive {
 			wasRegulatingHeading = false;
 		}
 	}
+	public void regulatedDrive(double y, double x, double w, double t){
+		regulatedDrive(y,x,w,t, false);
+	}
 	public void regulatedDrive(double y, double x, double w) {
-		regulatedDrive(y,x,w,1);
+		regulatedDrive(y,x,w,1, false);
 	}
 	
 	public void setHeading(double heading) {
