@@ -1,43 +1,39 @@
 package org.usfirst.frc.team4213.robot;
 
-import com.kauailabs.nav6.frc.IMU;
+import com.kauailabs.nav6.frc.IMUAdvanced;
 
 import edu.wpi.first.wpilibj.*;
-import edu.wpi.first.wpilibj.livewindow.LiveWindow;
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 
 import java.lang.Math;
 
 public class SlideDrive {
-	CANJaguar leftWheels, rightWheels, strafingWheels;
+	MCRSpeedController leftWheels = new MCRSpeedController(1,true,false);
+	MCRSpeedController rightWheels = new MCRSpeedController(2,true,true);
+	MCRSpeedController strafingWheels = new MCRSpeedController(3,true,false);
 	
-	  SerialPort serial_port;
-	  IMU imu;
+	  SerialPort serial_port = new SerialPort(57600,SerialPort.Port.kOnboard);
+	  IMUAdvanced imu;
 	  double desiredHeading = 0;
 	  boolean wasRegulatingHeading=true;
+	  double velocity=0, position=0;
+	  long lastTime=0;
 	
-	public SlideDrive(CANJaguar left, CANJaguar right, CANJaguar strafing) {
-		leftWheels=left;
-		rightWheels=right;
-		strafingWheels=strafing;
+	public SlideDrive() {
 		
 		// Put all of the jags into voltage (scaled from -1 to +1) mode.
-		leftWheels.setPercentMode();
+		/*leftWheels.setPercentMode();
 		leftWheels.enableControl();
 		rightWheels.setPercentMode();
 		rightWheels.enableControl();
 		strafingWheels.setPercentMode();
-		strafingWheels.enableControl();
+		strafingWheels.enableControl();*/
 		
 		try {
-	    	serial_port = new SerialPort(57600,SerialPort.Port.kOnboard);
-			imu = new IMU(serial_port, (byte)50);
+			imu = new IMUAdvanced(serial_port, (byte)50);
     	} catch( Exception ex ) {
     		ex.printStackTrace();
     	}
-        if ( imu != null ) {
-            LiveWindow.addSensor("IMU", "Gyro", imu);
-        }
         
         putRequiredDashboardValues();
 	}
@@ -46,8 +42,8 @@ public class SlideDrive {
 		// Make sure we have our tuning constants on the dashboard if they aren't already there.
         try{SmartDashboard.getNumber("Gyro KP");}
         catch(Exception e){SmartDashboard.putNumber("Gyro KP", 130);}
-        try{SmartDashboard.getNumber("Gyro KPE");}
-        catch(Exception e){SmartDashboard.putNumber("Gyro KPE", 0.5);}
+        try{SmartDashboard.getNumber("Gyro KE");}
+        catch(Exception e){SmartDashboard.putNumber("Gyro KE", 0.5);}
 	}
 
 	
@@ -63,10 +59,48 @@ public class SlideDrive {
 		imu.zeroYaw();
 		desiredHeading = 0;
 	}
+	
+	public void smartZero() {
+		
+		if (imu.getYaw() > -45 && imu.getYaw() < 45){
+			imu.zeroYaw();
+			imu.user_yaw_offset += 0;
+			desiredHeading = 0;
+		} else if (imu.getYaw() > 45 && imu.getYaw() < 135){
+			imu.zeroYaw();
+			imu.user_yaw_offset += 90;
+			desiredHeading = 90;
+		} else if (imu.getYaw() > -135 && imu.getYaw() < -45){
+			imu.zeroYaw();
+			imu.user_yaw_offset -= 90;
+			desiredHeading = -90;
+		} else {
+			imu.zeroYaw();
+			imu.user_yaw_offset += 180;
+			desiredHeading = 180;
+		}
+		
+		
+		
+	}
 	    
-	public void rawDrive(double y, double x, double w, double t) {
-		double left = (y+w)*t;
-		double right = -(y-w)*t;
+	public void rawDrive(double y, double x, double w, double t, boolean throttleW) {
+		/*if (lastTime==0)
+			lastTime=System.currentTimeMillis();
+		long elapsedTime = System.currentTimeMillis()-lastTime;
+		lastTime=System.currentTimeMillis();
+		velocity+=imu.getWorldLinearAccelX()*elapsedTime;
+		position+=velocity*elapsedTime;
+		
+		SmartDashboard.putNumber("Velocity", velocity);
+		SmartDashboard.putNumber("Position", position);*/
+		
+		
+		double left=(y*t+w), right=-(y*t-w);
+		if (throttleW) {
+			left = (y+w)*t;
+			right = (y-w)*t;
+		}
 		
 		if (Math.abs(left) > Math.abs(right)) {
 			if (Math.abs(left) > t) {
@@ -87,12 +121,13 @@ public class SlideDrive {
 	}
 	
 	public void rawDrive(double y, double x, double w) {
-		rawDrive(y,x,w,1);
+		rawDrive(y,x,w,1,true);
 	}
 	
 	public void regulatedDrive(double y, double x, double w, double t, boolean fieldOriented) {		
 		double currentHeading = imu.getYaw();
 		
+		SmartDashboard.putBoolean("Field Oriented Drive Enabled", fieldOriented);
 		if (fieldOriented) {
 			double m = Math.sqrt(y*y+x*x);
 			double h = Math.atan2(x, y)-Math.toRadians(currentHeading);
@@ -125,11 +160,11 @@ public class SlideDrive {
 			
 			SmartDashboard.putNumber("Robot Heading Error", error);
 			
-			rawDrive(y, 0, Math.copySign(Math.pow(Math.abs(error/SmartDashboard.getNumber("Gyro KP")), SmartDashboard.getNumber("Gyro KE")), error), t);
+			rawDrive(y, 0, Math.copySign(Math.pow(Math.abs(error/SmartDashboard.getNumber("Gyro KP")), SmartDashboard.getNumber("Gyro KE")), error), t, false);
 			
 			wasRegulatingHeading = true;
 		} else {
-			rawDrive(y, 0, w, t);
+			rawDrive(y, 0, w, t, true);
 			
 			wasRegulatingHeading = false;
 		}
@@ -143,5 +178,9 @@ public class SlideDrive {
 	
 	public void setHeading(double heading) {
 		desiredHeading = heading;
+	}
+	
+	public void stop(){
+		rawDrive(0,0,0,0,true);
 	}
 }
